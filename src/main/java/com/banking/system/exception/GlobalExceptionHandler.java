@@ -15,13 +15,19 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleIllegalArgument(
             IllegalArgumentException exception) {
 
+        String message = exception.getMessage();
+
+        HttpStatus status = "Duplicate transaction ID".equals(message)
+                ? HttpStatus.CONFLICT
+                : HttpStatus.BAD_REQUEST;
+
         Map<String, String> response = Map.of(
                 "status", "FAILED",
-                "message", exception.getMessage()
+                "message", message
         );
 
         return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
+                .status(status)
                 .body(response);
     }
 }

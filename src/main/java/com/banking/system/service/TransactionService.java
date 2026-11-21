@@ -21,6 +21,7 @@ public class TransactionService {
     public TransactionService(
             AccountRepository accountRepository,
             TransactionRepository transactionRepository) {
+
         this.accountRepository = accountRepository;
         this.transactionRepository = transactionRepository;
     }
@@ -32,15 +33,16 @@ public class TransactionService {
             UUID transactionId) {
 
         validateTransaction(amount, transactionId);
+        checkDuplicateTransaction(transactionId);
 
         Account account = accountRepository.findByIdForUpdate(accountId)
                 .orElseThrow(() ->
                         new IllegalArgumentException("Account not found"));
 
+        checkDuplicateTransaction(transactionId);
         validateActiveAccount(account);
 
         BigDecimal newBalance = account.getBalance().add(amount);
-
         accountRepository.updateBalance(accountId, newBalance);
 
         BankTransaction transaction = new BankTransaction();
@@ -61,11 +63,13 @@ public class TransactionService {
             UUID transactionId) {
 
         validateTransaction(amount, transactionId);
+        checkDuplicateTransaction(transactionId);
 
         Account account = accountRepository.findByIdForUpdate(accountId)
                 .orElseThrow(() ->
                         new IllegalArgumentException("Account not found"));
 
+        checkDuplicateTransaction(transactionId);
         validateActiveAccount(account);
 
         if (account.getBalance().compareTo(amount) < 0) {
@@ -73,7 +77,6 @@ public class TransactionService {
         }
 
         BigDecimal newBalance = account.getBalance().subtract(amount);
-
         accountRepository.updateBalance(accountId, newBalance);
 
         BankTransaction transaction = new BankTransaction();
@@ -85,6 +88,13 @@ public class TransactionService {
         transaction.setDescription("Money withdrawn");
 
         return transactionRepository.save(transaction);
+    }
+
+    private void checkDuplicateTransaction(UUID transactionId) {
+
+        if (transactionRepository.findByTransactionId(transactionId).isPresent()) {
+            throw new IllegalArgumentException("Duplicate transaction ID");
+        }
     }
 
     private void validateTransaction(
@@ -103,6 +113,7 @@ public class TransactionService {
     }
 
     private void validateActiveAccount(Account account) {
+
         if (!"ACTIVE".equals(account.getStatus())) {
             throw new IllegalArgumentException("Account is not active");
         }
