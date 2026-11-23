@@ -70,6 +70,33 @@ public class AccountRepository {
         }, customerId);
     }
 
+    // Find account without locking its database row
+    public Optional<Account> findById(Long accountId) {
+
+        String sql = """
+                SELECT account_id, customer_id, account_number,
+                       account_type, balance, status, created_at
+                FROM account
+                WHERE account_id = ?
+                """;
+
+        List<Account> accounts = jdbcTemplate.query(sql, (rs, rowNum) -> {
+            Account account = new Account();
+            account.setAccountId(rs.getLong("account_id"));
+            account.setCustomerId(rs.getLong("customer_id"));
+            account.setAccountNumber(rs.getString("account_number"));
+            account.setAccountType(rs.getString("account_type"));
+            account.setBalance(rs.getBigDecimal("balance"));
+            account.setStatus(rs.getString("status"));
+            account.setCreatedAt(
+                    rs.getObject("created_at", OffsetDateTime.class)
+            );
+            return account;
+        }, accountId);
+
+        return accounts.stream().findFirst();
+    }
+
     // Fetch account and lock its database row
     public Optional<Account> findByIdForUpdate(Long accountId) {
 
@@ -96,6 +123,35 @@ public class AccountRepository {
         }, accountId);
 
         return accounts.stream().findFirst();
+    }
+
+    // Lock both accounts in ascending account ID order
+    public List<Account> findAccountsForTransfer(
+            Long firstAccountId,
+            Long secondAccountId) {
+
+        String sql = """
+                SELECT account_id, customer_id, account_number,
+                       account_type, balance, status, created_at
+                FROM account
+                WHERE account_id IN (?, ?)
+                ORDER BY account_id
+                FOR UPDATE
+                """;
+
+        return jdbcTemplate.query(sql, (rs, rowNum) -> {
+            Account account = new Account();
+            account.setAccountId(rs.getLong("account_id"));
+            account.setCustomerId(rs.getLong("customer_id"));
+            account.setAccountNumber(rs.getString("account_number"));
+            account.setAccountType(rs.getString("account_type"));
+            account.setBalance(rs.getBigDecimal("balance"));
+            account.setStatus(rs.getString("status"));
+            account.setCreatedAt(
+                    rs.getObject("created_at", OffsetDateTime.class)
+            );
+            return account;
+        }, firstAccountId, secondAccountId);
     }
 
     // Update account balance

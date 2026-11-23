@@ -20,6 +20,7 @@ public class FailedTransactionService {
         this.failedTransactionRepository = failedTransactionRepository;
     }
 
+    // Record failed withdrawal
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordFailedWithdrawal(
             UUID transactionId,
@@ -39,6 +40,33 @@ public class FailedTransactionService {
         failedTransactionRepository.saveAudit(
                 transactionId,
                 "WITHDRAWAL_REJECTED",
+                "FAILED",
+                failureReason,
+                Thread.currentThread().getName()
+        );
+    }
+
+    // Record failed money transfer
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordFailedTransfer(
+            UUID transactionId,
+            Long fromAccountId,
+            Long toAccountId,
+            BigDecimal amount,
+            String failureReason) {
+
+        failedTransactionRepository.saveFailedTransaction(
+                transactionId,
+                fromAccountId,
+                toAccountId,
+                "TRANSFER",
+                amount,
+                failureReason
+        );
+
+        failedTransactionRepository.saveAudit(
+                transactionId,
+                "TRANSFER_REJECTED",
                 "FAILED",
                 failureReason,
                 Thread.currentThread().getName()

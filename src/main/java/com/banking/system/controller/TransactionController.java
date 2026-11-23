@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -28,6 +29,7 @@ public class TransactionController {
         this.failedTransactionService = failedTransactionService;
     }
 
+    // Deposit money into an account
     @PostMapping("/deposit")
     public ResponseEntity<BankTransaction> deposit(
             @RequestBody Map<String, String> request) {
@@ -38,9 +40,12 @@ public class TransactionController {
                 UUID.fromString(request.get("transactionId"))
         );
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(transaction);
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(transaction);
     }
 
+    // Withdraw money from an account
     @PostMapping("/withdraw")
     public ResponseEntity<BankTransaction> withdraw(
             @RequestBody Map<String, String> request) {
@@ -56,7 +61,9 @@ public class TransactionController {
                     transactionId
             );
 
-            return ResponseEntity.status(HttpStatus.CREATED).body(transaction);
+            return ResponseEntity
+                    .status(HttpStatus.CREATED)
+                    .body(transaction);
 
         } catch (IllegalArgumentException exception) {
 
@@ -72,5 +79,55 @@ public class TransactionController {
 
             throw exception;
         }
+    }
+
+    // Transfer money between two accounts
+    @PostMapping("/transfer")
+    public ResponseEntity<BankTransaction> transfer(
+            @RequestBody Map<String, String> request) {
+
+        Long fromAccountId = Long.valueOf(request.get("fromAccountId"));
+        Long toAccountId = Long.valueOf(request.get("toAccountId"));
+        BigDecimal amount = new BigDecimal(request.get("amount"));
+        UUID transactionId = UUID.fromString(request.get("transactionId"));
+
+        try {
+            BankTransaction transaction = transactionService.transfer(
+                    fromAccountId,
+                    toAccountId,
+                    amount,
+                    transactionId
+            );
+
+            return ResponseEntity
+                    .status(HttpStatus.CREATED)
+                    .body(transaction);
+
+        } catch (IllegalArgumentException exception) {
+
+            if ("Insufficient balance".equals(exception.getMessage())) {
+
+                failedTransactionService.recordFailedTransfer(
+                        transactionId,
+                        fromAccountId,
+                        toAccountId,
+                        amount,
+                        exception.getMessage()
+                );
+            }
+
+            throw exception;
+        }
+    }
+
+    // Get transaction history for an account
+    @GetMapping("/account/{accountId}")
+    public ResponseEntity<List<BankTransaction>> getAccountTransactionHistory(
+            @PathVariable Long accountId) {
+
+        List<BankTransaction> transactions =
+                transactionService.getAccountTransactionHistory(accountId);
+
+        return ResponseEntity.ok(transactions);
     }
 }
