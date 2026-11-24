@@ -1,6 +1,7 @@
 
 package com.banking.system.service;
 
+import com.banking.system.model.BulkTransactionRequest;
 import com.banking.system.repository.FailedTransactionRepository;
 
 import org.springframework.stereotype.Service;
@@ -17,6 +18,7 @@ public class FailedTransactionService {
 
     public FailedTransactionService(
             FailedTransactionRepository failedTransactionRepository) {
+
         this.failedTransactionRepository = failedTransactionRepository;
     }
 
@@ -67,6 +69,62 @@ public class FailedTransactionService {
         failedTransactionRepository.saveAudit(
                 transactionId,
                 "TRANSFER_REJECTED",
+                "FAILED",
+                failureReason,
+                Thread.currentThread().getName()
+        );
+    }
+
+    // Record failed transactions from bulk processing
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordBulkFailedTransaction(
+            BulkTransactionRequest request,
+            String failureReason) {
+
+        String transactionType =
+                request.getTransactionType().toUpperCase();
+
+        UUID transactionId = request.getTransactionId();
+
+        Long fromAccountId = null;
+        Long toAccountId = null;
+        String eventType;
+
+        switch (transactionType) {
+
+            case "WITHDRAWAL":
+
+                fromAccountId = request.getAccountId();
+                eventType = "WITHDRAWAL_REJECTED";
+
+                break;
+
+            case "TRANSFER":
+
+                fromAccountId = request.getFromAccountId();
+                toAccountId = request.getToAccountId();
+                eventType = "TRANSFER_REJECTED";
+
+                break;
+
+            default:
+
+                throw new IllegalArgumentException(
+                        "Unsupported failed transaction type");
+        }
+
+        failedTransactionRepository.saveFailedTransaction(
+                transactionId,
+                fromAccountId,
+                toAccountId,
+                transactionType,
+                request.getAmount(),
+                failureReason
+        );
+
+        failedTransactionRepository.saveAudit(
+                transactionId,
+                eventType,
                 "FAILED",
                 failureReason,
                 Thread.currentThread().getName()

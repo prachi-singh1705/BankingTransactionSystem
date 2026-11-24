@@ -2,8 +2,11 @@
 package com.banking.system.controller;
 
 import com.banking.system.model.BankTransaction;
+import com.banking.system.model.BulkTransactionRequest;
+
 import com.banking.system.service.TransactionService;
 import com.banking.system.service.FailedTransactionService;
+import com.banking.system.service.ConcurrentTransactionService;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -13,6 +16,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/api/transactions")
@@ -20,13 +24,16 @@ public class TransactionController {
 
     private final TransactionService transactionService;
     private final FailedTransactionService failedTransactionService;
+    private final ConcurrentTransactionService concurrentTransactionService;
 
     public TransactionController(
             TransactionService transactionService,
-            FailedTransactionService failedTransactionService) {
+            FailedTransactionService failedTransactionService,
+            ConcurrentTransactionService concurrentTransactionService) {
 
         this.transactionService = transactionService;
         this.failedTransactionService = failedTransactionService;
+        this.concurrentTransactionService = concurrentTransactionService;
     }
 
     // Deposit money into an account
@@ -129,5 +136,25 @@ public class TransactionController {
                 transactionService.getAccountTransactionHistory(accountId);
 
         return ResponseEntity.ok(transactions);
+    }
+
+    // Process multiple transactions concurrently
+    @PostMapping("/bulk")
+    public CompletableFuture<ResponseEntity<List<Map<String, Object>>>> processBulkTransactions(
+            @RequestBody List<BulkTransactionRequest> requests) {
+
+        if (requests == null || requests.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "At least one transaction is required");
+        }
+
+        if (requests.size() > 1000) {
+            throw new IllegalArgumentException(
+                    "Maximum 1000 transactions allowed per request");
+        }
+
+        return concurrentTransactionService
+                .processBulkTransactions(requests)
+                .thenApply(ResponseEntity::ok);
     }
 }

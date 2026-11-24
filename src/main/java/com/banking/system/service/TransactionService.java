@@ -5,11 +5,14 @@ import com.banking.system.model.Account;
 import com.banking.system.model.BankTransaction;
 import com.banking.system.repository.AccountRepository;
 import com.banking.system.repository.TransactionRepository;
+import com.banking.system.repository.FailedTransactionRepository;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -18,13 +21,16 @@ public class TransactionService {
 
     private final AccountRepository accountRepository;
     private final TransactionRepository transactionRepository;
+    private final FailedTransactionRepository failedTransactionRepository;
 
     public TransactionService(
             AccountRepository accountRepository,
-            TransactionRepository transactionRepository) {
+            TransactionRepository transactionRepository,
+            FailedTransactionRepository failedTransactionRepository) {
 
         this.accountRepository = accountRepository;
         this.transactionRepository = transactionRepository;
+        this.failedTransactionRepository = failedTransactionRepository;
     }
 
     // Deposit money into an account
@@ -56,7 +62,12 @@ public class TransactionService {
         transaction.setStatus("SUCCESS");
         transaction.setDescription("Money deposited");
 
-        return transactionRepository.save(transaction);
+        BankTransaction savedTransaction =
+            transactionRepository.save(transaction);
+
+        recordSuccessfulAudit(transactionId, "DEPOSIT_COMPLETED");
+
+        return savedTransaction;
     }
 
     // Withdraw money from an account
@@ -92,7 +103,12 @@ public class TransactionService {
         transaction.setStatus("SUCCESS");
         transaction.setDescription("Money withdrawn");
 
-        return transactionRepository.save(transaction);
+        BankTransaction savedTransaction =
+            transactionRepository.save(transaction);
+
+        recordSuccessfulAudit(transactionId, "WITHDRAWAL_COMPLETED");
+
+        return savedTransaction;
     }
 
     // Transfer money between two accounts
@@ -166,10 +182,28 @@ public class TransactionService {
         transaction.setStatus("SUCCESS");
         transaction.setDescription("Money transferred successfully");
 
-        return transactionRepository.save(transaction);
-    }
+        BankTransaction savedTransaction =
+            transactionRepository.save(transaction);
 
-    // Get complete transaction history for an account
+        recordSuccessfulAudit(transactionId, "TRANSFER_COMPLETED");
+
+        return savedTransaction;
+    }
+    // Record successful transaction audit
+    private void recordSuccessfulAudit(
+        UUID transactionId,
+        String eventType) {
+
+    failedTransactionRepository.saveAudit(
+            transactionId,
+            eventType,
+            "SUCCESS",
+            null,
+            Thread.currentThread().getName()
+    );
+}
+
+    // Get successful and failed transaction history for an account
     public List<BankTransaction> getAccountTransactionHistory(
             Long accountId) {
 
@@ -182,8 +216,28 @@ public class TransactionService {
                 .orElseThrow(() ->
                         new IllegalArgumentException("Account not found"));
 
-        // Fetch all transaction records for this account
-        return transactionRepository.findByAccountId(accountId);
+        // Fetch successful transactions
+        List<BankTransaction> transactions =
+                new ArrayList<>(
+                        transactionRepository.findByAccountId(accountId)
+                );
+
+        // Fetch failed transactions
+        List<BankTransaction> failedTransactions =
+                failedTransactionRepository.findFailedByAccountId(accountId);
+
+        // Combine both lists
+        transactions.addAll(failedTransactions);
+
+        // Sort newest transactions first
+        transactions.sort(
+                Comparator.comparing(
+                        BankTransaction::getCreatedAt,
+                        Comparator.nullsLast(Comparator.reverseOrder())
+                )
+        );
+
+        return transactions;
     }
 
     // Check duplicate transaction ID
