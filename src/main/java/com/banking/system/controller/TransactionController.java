@@ -1,8 +1,12 @@
 
 package com.banking.system.controller;
 
+import java.util.concurrent.CompletableFuture;
+
 import com.banking.system.model.BankTransaction;
 import com.banking.system.model.BulkTransactionRequest;
+import com.banking.system.model.MoneyTransactionRequest;
+import com.banking.system.model.TransferRequest;
 
 import com.banking.system.service.TransactionService;
 import com.banking.system.service.FailedTransactionService;
@@ -12,11 +16,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
+
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/transactions")
@@ -39,12 +42,12 @@ public class TransactionController {
     // Deposit money into an account
     @PostMapping("/deposit")
     public ResponseEntity<BankTransaction> deposit(
-            @RequestBody Map<String, String> request) {
+            @Valid @RequestBody MoneyTransactionRequest request) {
 
         BankTransaction transaction = transactionService.deposit(
-                Long.valueOf(request.get("accountId")),
-                new BigDecimal(request.get("amount")),
-                UUID.fromString(request.get("transactionId"))
+                request.getAccountId(),
+                request.getAmount(),
+                request.getTransactionId()
         );
 
         return ResponseEntity
@@ -55,11 +58,11 @@ public class TransactionController {
     // Withdraw money from an account
     @PostMapping("/withdraw")
     public ResponseEntity<BankTransaction> withdraw(
-            @RequestBody Map<String, String> request) {
+            @Valid @RequestBody MoneyTransactionRequest request) {
 
-        Long accountId = Long.valueOf(request.get("accountId"));
-        BigDecimal amount = new BigDecimal(request.get("amount"));
-        UUID transactionId = UUID.fromString(request.get("transactionId"));
+        Long accountId = request.getAccountId();
+        var amount = request.getAmount();
+        var transactionId = request.getTransactionId();
 
         try {
             BankTransaction transaction = transactionService.withdraw(
@@ -91,12 +94,12 @@ public class TransactionController {
     // Transfer money between two accounts
     @PostMapping("/transfer")
     public ResponseEntity<BankTransaction> transfer(
-            @RequestBody Map<String, String> request) {
+            @Valid @RequestBody TransferRequest request) {
 
-        Long fromAccountId = Long.valueOf(request.get("fromAccountId"));
-        Long toAccountId = Long.valueOf(request.get("toAccountId"));
-        BigDecimal amount = new BigDecimal(request.get("amount"));
-        UUID transactionId = UUID.fromString(request.get("transactionId"));
+        Long fromAccountId = request.getFromAccountId();
+        Long toAccountId = request.getToAccountId();
+        var amount = request.getAmount();
+        var transactionId = request.getTransactionId();
 
         try {
             BankTransaction transaction = transactionService.transfer(
@@ -141,7 +144,7 @@ public class TransactionController {
     // Process multiple transactions concurrently
     @PostMapping("/bulk")
     public CompletableFuture<ResponseEntity<List<Map<String, Object>>>> processBulkTransactions(
-            @RequestBody List<BulkTransactionRequest> requests) {
+            @RequestBody List<@Valid BulkTransactionRequest> requests) {
 
         if (requests == null || requests.isEmpty()) {
             throw new IllegalArgumentException(

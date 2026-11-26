@@ -34,6 +34,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
+import static org.mockito.Mockito.verifyNoInteractions;
+
 @WebMvcTest(TransactionController.class)
 class TransactionControllerTest {
 
@@ -107,6 +109,65 @@ class TransactionControllerTest {
                 transactionId
         );
     }
+
+@Test
+void testInvalidAmountReturnsBadRequest() throws Exception {
+
+    UUID transactionId =
+            UUID.fromString("66666666-6666-4666-8666-666666666666");
+
+    when(transactionService.deposit(
+            eq(1L),
+            eq(new BigDecimal("0.00")),
+            eq(transactionId)
+    )).thenThrow(new IllegalArgumentException(
+            "Amount must be greater than zero"
+    ));
+
+    mockMvc.perform(post("/api/transactions/deposit")
+                    .contentType("application/json")
+                    .content("""
+                            {
+                                "accountId": "1",
+                                "amount": "0.00",
+                                "transactionId": "66666666-6666-4666-8666-666666666666"
+                            }
+                            """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.status").value("FAILED"))
+            .andExpect(jsonPath("$.message")
+                    .value("Amount must be greater than zero"));
+}
+
+@Test
+void testDuplicateTransactionReturnsConflict() throws Exception {
+
+    UUID transactionId =
+            UUID.fromString("77777777-7777-4777-8777-777777777777");
+
+    when(transactionService.deposit(
+            eq(1L),
+            eq(new BigDecimal("100.00")),
+            eq(transactionId)
+    )).thenThrow(new IllegalArgumentException(
+            "Duplicate transaction ID"
+    ));
+
+    mockMvc.perform(post("/api/transactions/deposit")
+                    .contentType("application/json")
+                    .content("""
+                            {
+                                "accountId": "1",
+                                "amount": "100.00",
+                                "transactionId": "77777777-7777-4777-8777-777777777777"
+                            }
+                            """))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.status").value("FAILED"))
+            .andExpect(jsonPath("$.message")
+                    .value("Duplicate transaction ID"));
+}
+
 
     @Test
     void testWithdraw() throws Exception {
@@ -251,4 +312,186 @@ void testBulkTransactions() throws Exception {
     verify(concurrentTransactionService).processBulkTransactions(anyList());
 }
 
+
+
+@Test
+void testBulkTransactionWithZeroAmountReturnsBadRequest() throws Exception {
+
+    mockMvc.perform(post("/api/transactions/bulk")
+                    .contentType("application/json")
+                    .content("""
+                            [
+                                {
+                                    "transactionType": "DEPOSIT",
+                                    "accountId": 1,
+                                    "amount": 0,
+                                    "transactionId": "88888888-8888-4888-8888-888888888888"
+                                }
+                            ]
+                            """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.status").value("FAILED"))
+            .andExpect(jsonPath("$.message")
+                    .value("Amount must be greater than zero"));
+
+    verifyNoInteractions(concurrentTransactionService);
+}
+
+
+@Test
+void testBulkTransactionWithMissingAmountReturnsBadRequest() throws Exception {
+
+    mockMvc.perform(post("/api/transactions/bulk")
+                    .contentType("application/json")
+                    .content("""
+                            [
+                                {
+                                    "transactionType": "DEPOSIT",
+                                    "accountId": 1,
+                                    "transactionId": "99999999-9999-4999-8999-999999999999"
+                                }
+                            ]
+                            """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.status").value("FAILED"))
+            .andExpect(jsonPath("$.message")
+                    .value("Amount is required"));
+
+    verifyNoInteractions(concurrentTransactionService);
+}
+
+
+@Test
+void testDepositWithMissingAmountReturnsBadRequest() throws Exception {
+
+    mockMvc.perform(post("/api/transactions/deposit")
+                    .contentType("application/json")
+                    .content("""
+                            {
+                                "accountId": 1,
+                                "transactionId": "99999999-9999-4999-8999-999999999999"
+                            }
+                            """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.status").value("FAILED"))
+            .andExpect(jsonPath("$.message")
+                    .value("Amount is required"));
+
+    verifyNoInteractions(transactionService);
+}
+@Test
+void testWithdrawWithMissingAmountReturnsBadRequest() throws Exception {
+
+    mockMvc.perform(post("/api/transactions/withdraw")
+                    .contentType("application/json")
+                    .content("""
+                            {
+                                "accountId": 1,
+                                "transactionId": "99999999-9999-4999-8999-999999999999"
+                            }
+                            """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.status").value("FAILED"))
+            .andExpect(jsonPath("$.message")
+                    .value("Amount is required"));
+
+    verifyNoInteractions(transactionService);
+}
+
+@Test
+void testTransferWithMissingAmountReturnsBadRequest() throws Exception {
+
+    mockMvc.perform(post("/api/transactions/transfer")
+                    .contentType("application/json")
+                    .content("""
+                            {
+                                "fromAccountId": 1,
+                                "toAccountId": 2,
+                                "transactionId": "99999999-9999-4999-8999-999999999999"
+                            }
+                            """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.status").value("FAILED"))
+            .andExpect(jsonPath("$.message")
+                    .value("Amount is required"));
+
+    verifyNoInteractions(transactionService);
+}
+@Test
+void testDepositWithNegativeAccountIdReturnsBadRequest() throws Exception {
+
+    mockMvc.perform(post("/api/transactions/deposit")
+                    .contentType("application/json")
+                    .content("""
+                            {
+                                "accountId": -1,
+                                "amount": 500,
+                                "transactionId": "99999999-9999-4999-8999-999999999999"
+                            }
+                            """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.status").value("FAILED"))
+            .andExpect(jsonPath("$.message")
+                    .value("Account ID must be positive"));
+
+    verifyNoInteractions(transactionService);
+}
+@Test
+void testTransferWithNegativeAccountIdReturnsBadRequest() throws Exception {
+
+    mockMvc.perform(post("/api/transactions/transfer")
+                    .contentType("application/json")
+                    .content("""
+                            {
+                                "fromAccountId": -1,
+                                "toAccountId": 2,
+                                "amount": 500,
+                                "transactionId": "99999999-9999-4999-8999-999999999999"
+                            }
+                            """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.status").value("FAILED"))
+            .andExpect(jsonPath("$.message")
+                    .value("From account ID must be positive"));
+
+    verifyNoInteractions(transactionService);
+}
+@Test
+void testTransferToSameAccountReturnsBadRequest() throws Exception {
+
+    UUID transactionId = UUID.fromString(
+            "99999999-9999-4999-8999-999999999999"
+    );
+
+    when(transactionService.transfer(
+            eq(1L),
+            eq(1L),
+            eq(new java.math.BigDecimal("500")),
+            eq(transactionId)
+    )).thenThrow(new IllegalArgumentException(
+            "Cannot transfer money to the same account"
+    ));
+
+    mockMvc.perform(post("/api/transactions/transfer")
+                    .contentType("application/json")
+                    .content("""
+                            {
+                                "fromAccountId": 1,
+                                "toAccountId": 1,
+                                "amount": 500,
+                                "transactionId": "99999999-9999-4999-8999-999999999999"
+                            }
+                            """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.status").value("FAILED"))
+            .andExpect(jsonPath("$.message")
+                    .value("Cannot transfer money to the same account"));
+
+    verify(transactionService).transfer(
+            eq(1L),
+            eq(1L),
+            eq(new java.math.BigDecimal("500")),
+            eq(transactionId)
+    );
+}
 }
